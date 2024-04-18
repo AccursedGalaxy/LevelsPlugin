@@ -1,0 +1,4 @@
+# Base health at level 0
+baseHealth: 20.0
+# Additional health per level
+healthPerLevel: 2.0

@@ -1,0 +1,20 @@
+name: Levels
+version: '1.0-SNAPSHOT'
+main: me.robin.levels.Levels
+api-version: '1.20'
+depend: [PlaceholderAPI]
+
+commands:
+  addxp:
+    description: Adds experience points to the specified player.
+    usage: /addxp <player> <amount>
+    permission: levels.manage.xp
+  removexp:
+    description: Removes experience points from the specified player.
+    usage: /removexp <player> <amount>
+    permission: levels.manage.xp
+
+permissions:
+  levels.manage.xp:
+    description: Allows adding or removing XP to/from players.
+    default: op
