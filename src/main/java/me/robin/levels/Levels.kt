@@ -17,6 +17,7 @@ import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerRespawnEvent
 import org.bukkit.scheduler.BukkitRunnable
+import kotlin.math.pow
 
 class Levels : JavaPlugin(), Listener {
     override fun onEnable() {
@@ -24,6 +25,7 @@ class Levels : JavaPlugin(), Listener {
         this.saveDefaultConfig()
         this.getCommand("addxp")?.setExecutor(AddXPCommand(this))
         this.getCommand("removexp")?.setExecutor(RemoveXPCommand(this))
+        this.getCommand("clearalldata")?.setExecutor(ClearAllDataCommand(this))
         startAutoSaveTask()
         if (server.pluginManager.getPlugin("PlaceholderAPI") != null) {
             LevelsExpansion(this).register()
@@ -70,10 +72,15 @@ class Levels : JavaPlugin(), Listener {
         checkLevelUp(player, currentXP)  // Recalculate and set level based on XP
     }
 
-    private fun savePlayerData(player: Player) {
+    fun savePlayerData(player: Player) {
         val xp = player.persistentDataContainer.getOrDefault(customXPKey(), PersistentDataType.INTEGER, 0)
         player.persistentDataContainer.set(customXPKey(), PersistentDataType.INTEGER, xp)
         logger.info("Saved player data!")
+    }
+
+    fun deletePlayerData(player: Player) {
+        player.persistentDataContainer.remove(customXPKey())
+        logger.info("Deleted player data!")
     }
 
     private fun startAutoSaveTask() {
@@ -90,10 +97,21 @@ class Levels : JavaPlugin(), Listener {
     fun addCustomXP(player: Player, xpToAdd: Int) {
         val xpDataContainer = player.persistentDataContainer
         val currentXP = xpDataContainer.getOrDefault(customXPKey(), PersistentDataType.INTEGER, 0)
-        val newXP = currentXP + xpToAdd
+        val maxXP = calculateMaxXP()
+        val newXP = (currentXP + xpToAdd).coerceAtMost(maxXP)
         xpDataContainer.set(customXPKey(), PersistentDataType.INTEGER, newXP)
-        player.sendMessage("$xpToAdd XP added.")
+        player.sendMessage("$xpToAdd XP added, total: $newXP.")
         checkLevelUp(player, newXP)
+    }
+
+    fun calculateMaxXP(): Int {
+        val maxLevel = config.getInt("maxLevel", 100)
+        return calculateXPForLevel(maxLevel)
+    }
+
+    fun calculateXPForLevel(level: Int): Int {
+        // Adjust the XP calculation to find the XP needed for any given level
+        return (level.toDouble().pow(2) * 5).toInt() // Inverse of level calculation
     }
 
     fun removeCustomXP(player: Player, xpToRemove: Int) {
@@ -107,6 +125,19 @@ class Levels : JavaPlugin(), Listener {
 
     private fun checkLevelUp(player: Player, totalXP: Int) {
         val currentLevel = calculateLevel(totalXP)
+        val maxLevel = config.getInt("maxLevel", 100)
+        val maxXP = calculateMaxXP()
+
+        // If XP is exactly at max or just overflowed to it due to addition, set level to max
+        if (totalXP >= maxXP) {
+            player.sendMessage("You've reached the maximum level!")
+            if (player.level < maxLevel) {
+                player.level = maxLevel
+                updatePlayerHealth(player, maxLevel)
+            }
+            return
+        }
+
         if (currentLevel != player.level) {
             player.level = currentLevel
             player.sendMessage("Congratulations! You've reached level $currentLevel")
@@ -115,24 +146,43 @@ class Levels : JavaPlugin(), Listener {
     }
 
     fun calculateLevel(xp: Int): Int {
-        // Example: Simple square root level calculation
-        return sqrt(xp.toDouble()).toInt()
+        // Adjust the level calculation to scale less steeply
+        return (sqrt(xp.toDouble() / 5).toInt()) // Dividing XP by 5 to slow down the rate at which levels increase
     }
 
     private fun updatePlayerHealth(player: Player, level: Int) {
-        val baseHealth = this.config.getDouble("baseHealth")
-        val healthPerLevel = this.config.getDouble("healthPerLevel")
-        val newHealth = baseHealth + healthPerLevel * level
+        val baseHealth = config.getDouble("baseHealth", 20.0)  // Default minimum health
+        val maxReachableHealth = config.getDouble("maxReachableHealth", 40.0)  // Configurable maximum health
+        val maxLevel = config.getInt("maxLevel", 100)  // Maximum level from config
 
-        player.getAttribute(Attribute.GENERIC_MAX_HEALTH)?.let {
+        // Calculate health per level incrementally
+        val healthIncrement = (maxReachableHealth - baseHealth) / (maxLevel - 1)
+        val newHealth = (baseHealth + healthIncrement * (level - 1)).coerceIn(baseHealth, maxReachableHealth)
+
+        // Get the attribute instance for max health and safely update it
+        val attribute = player.getAttribute(Attribute.GENERIC_MAX_HEALTH)
+        attribute?.let {
             it.baseValue = newHealth
-            if (player.health > it.value) {
-                player.health = it.value
+            if (player.health > newHealth) {  // Ensure current health does not exceed max health
+                player.setHealth(newHealth)
             }
-        } ?: player.sendMessage("Error setting health.")
+        }
     }
 
     fun customXPKey() = org.bukkit.NamespacedKey(this, "custom_xp")
+}
+
+class ClearAllDataCommand(private val plugin: Levels) : CommandExecutor {
+    // This command is for testing purposes only delete all player data
+    override fun onCommand(sender: CommandSender, command: Command, label: String, args: Array<String>): Boolean {
+        if (args.isNotEmpty()) {
+            sender.sendMessage("Usage: /clearalldata")
+            return true
+        }
+        plugin.server.onlinePlayers.forEach(plugin::deletePlayerData)
+        sender.sendMessage("All player data cleared.")
+        return true
+    }
 }
 
 class AddXPCommand(private val plugin: Levels) : CommandExecutor {

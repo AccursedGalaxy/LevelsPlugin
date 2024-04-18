@@ -13,8 +13,15 @@ commands:
     description: Removes experience points from the specified player.
     usage: /removexp <player> <amount>
     permission: levels.manage.xp
+  clearalldata:
+    description: Clears all data from the plugin.
+    usage: /clearalldata
+    permission: levels.manage.clearalldata
 
 permissions:
   levels.manage.xp:
     description: Allows adding or removing XP to/from players.
+    default: op
+  levels.manage.clearalldata:
+    description: Allows clearing all data from the plugin.
     default: op

@@ -1,4 +1,3 @@
-# Base health at level 0
 baseHealth: 20.0
-# Additional health per level
-healthPerLevel: 2.0
+maxLevel: 100
+maxHealth: 40.0
